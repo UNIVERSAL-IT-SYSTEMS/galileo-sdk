@@ -6,12 +6,11 @@
 // virtual size_t write(uint8_t) needs to be overwritten in any extension of Print.h
 // Info on fundamental types found here: http://msdn.microsoft.com/en-us/library/cc953fe1.aspx
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <bitset>
 #include "Arduino.h"
 #include "Printable.h"
-#include "WString.h"
+
+#ifndef _PRINT_H
+#define _PRINT_H
 
 #define DEC 10
 #define HEX 16
@@ -359,3 +358,4 @@ public:
 	// prints a new line character
 	size_t println(void) { return print('\n'); }
 };
+#endif // _PRINT_H

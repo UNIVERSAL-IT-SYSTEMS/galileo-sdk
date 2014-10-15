@@ -19,6 +19,9 @@
 
 #define BUFFER_LENGTH 32
 
+// Forward declaration(s):
+int Log(const char *format, ...);
+
 class TwoWire
 {
 
@@ -182,6 +185,16 @@ public:
     void setI2cHasBeenEnabled(bool enable)
     {
         i2cHasBeenEnabled = enable;
+    }
+
+    void onReceive(void(*)(int))
+    {
+        Log("FEATURE UNAVAILABLE: Galileo cannot act as I2C slave device!");
+    }
+    
+    void onRequest(void(*)(void))
+    {
+        Log("FEATURE UNAVAILABLE: Galileo cannot act as I2C slave device!");
     }
 
     virtual size_t write(uint8_t data)

@@ -18,11 +18,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)\Source\eeprom.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)\Source\Servo.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)\Source\HardwareSerial.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)\Source\NetworkSerial.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)\Source\Stream.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)\Source\WString.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)\Source\PulseIn.cpp" />    
+    <ClCompile Include="$(MSBuildThisFileDirectory)\Source\WInterrupt.cpp" />    
   </ItemGroup>
 </Project>

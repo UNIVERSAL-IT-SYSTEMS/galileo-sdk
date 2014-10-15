@@ -16,9 +16,12 @@
 #include <winsock2.h>
 #include <WS2tcpip.h>
 #endif
+
 #include <cstdint>
 
+#ifndef _USE_MATH_DEFINES
 #define _USE_MATH_DEFINES
+#endif
 #include <math.h>
 
 #include "ArduinoError.h"
@@ -29,6 +32,11 @@
 #include "galileo.h"
 #include "binary.h"
 #include "wire.h"
+
+#include <memory>
+#include <map>
+#include <vector>
+#include <algorithm>
 
 #define NUM_ARDUINO_PINS 20
 #define NUM_ANALOG_PINS 6
@@ -91,22 +99,55 @@
 #define TWO_PI          6.283185307179586476925286766559
 
 #define boolean bool
-typedef unsigned char byte;
+typedef uint8_t byte;
 
 typedef unsigned short word;
+
+/// \brief Reference voltage constants
+/// \see analogReference()
+enum ReferenceVoltage : uint8_t {
+    DEFAULT = 0, ///< 5V analog reference
+    EXTERNAL = 1, ///< Pinout exists, but not supported by Galileo hardware
+};
 
 //
 // Printf like function to log to stdout and if a debugger is attached to the debugger output.
 //
+inline int Log(const char *format, ...)
+{
+    va_list args;
+    int len = 0;
+    char *buffer = NULL;
+
+    va_start(args, format);
+    len = _vscprintf(format, args) + 1;
+    buffer = new char[len];
+    if (buffer != NULL)
+    {
+        len = vsprintf_s(buffer, len, format, args);
+        printf(buffer);
+        if (IsDebuggerPresent())
+        {
+            OutputDebugStringA(buffer);
+        }
+        delete [](buffer);
+    }
+    else
+    {
+        len = 0;
+    }
+    return len;
+}
+
 inline int Log(const wchar_t *format, ...)
 {
     va_list args;
     int len = 0;
-    wchar_t* buffer;
+    wchar_t *buffer = NULL;
 
     va_start(args, format);
     len = _vscwprintf(format, args) + 1;
-    buffer = (wchar_t*)malloc(len*sizeof(wchar_t));
+    buffer = new wchar_t[len];
     if (buffer != NULL)
     {
         len = vswprintf_s(buffer, len, format, args);
@@ -115,7 +156,7 @@ inline int Log(const wchar_t *format, ...)
         {
             OutputDebugStringW(buffer);
         }
-        free(buffer);
+        delete [](buffer);
     }
     else
     {
@@ -126,7 +167,7 @@ inline int Log(const wchar_t *format, ...)
 
 // Arduino math definitions
 #define abs(x) ((x)>0?(x):-(x))
-#define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
+#define constrain(amt,low,high) do {amt=((amt)<(low)?(low):((amt)>(high)?(high):(amt)));} while (0)
 #define sq(x) ((x)*(x))
 inline long map(long x, long in_min, long in_max, long out_min, long out_max)
 {
@@ -135,6 +176,9 @@ inline long map(long x, long in_min, long in_max, long out_min, long out_max)
 
 // Function prototypes.
 inline void pinMode(unsigned int pin, unsigned int mode);
+inline void tone(int pin, unsigned int frequency);
+inline void tone(int pin, unsigned int frequency, unsigned long duration);
+static void noTone(int pin);
 
 // Internal functions (call at your own risk)
 inline void _RevertPinToDigital(int pin);
@@ -147,7 +191,7 @@ inline void _InitializePin(int pin);
 // pin configurations to be restored when needed after changes have been 
 // made for an alternate pin function (PWM vs GPIO use, for example).
 typedef struct {   // Comment format: Initialized value - Description
-    UINT pwmDutyCycle : 8;      // 0 - Pulse width (0 = 0%, 255 = 100%)
+    UINT pwmDutyCycle : 16;      // 0 - Pulse width (0 = 0%, 255 = 100%)
     UINT currentMode : 1;       // INPUT - INPUT or OUTPUT
     UINT modeSet : 1;           // INPUT - INPUT or OUTPUT set explicitely
     UINT currentMux : 1;        // DEFAULT_MUX - DEFAULT_MUX or ALTERNATE_MUX
@@ -322,7 +366,7 @@ typedef enum _PWM_CONFIG_REGS {
 // Arduino GPIO pin number.
 inline void _ValidateArduinoPinNumber(int pin)
 {
-    if ( (pin < 0) || (pin >= NUM_ARDUINO_PINS) )
+    if ((pin < 0) || (pin >= NUM_ARDUINO_PINS))
     {
         ThrowError("Invalid pin number (%d). Pin must be in the range [0, %d)",
             pin, NUM_ARDUINO_PINS);
@@ -331,53 +375,53 @@ inline void _ValidateArduinoPinNumber(int pin)
 
 // This table specifies the mux function for PWM use on a pin.
 // The table is indexed by Arduino GPIO pin number.
-const UCHAR _PwmMuxFunction[NUM_ARDUINO_PINS]
+const uint8_t _PwmMuxFunction[NUM_ARDUINO_PINS]
 {
     DEFAULT_MUX,				// Pin 0 - No PWM
-    DEFAULT_MUX,				// Pin 1 - No PWM
-    DEFAULT_MUX,				// Pin 2 - No PWM
-    ALTERNATE_MUX,				// Pin 3 - PWM uses alternate MUX
-    DEFAULT_MUX,				// Pin 4 - No PWM, no MUX
-    DEFAULT_MUX,				// Pin 5 - PWM, no MUX
-    DEFAULT_MUX,				// Pin 6 - PWM, no MUX
-    DEFAULT_MUX,				// Pin 7 - PWM, no MUX
-    DEFAULT_MUX,				// Pin 8 - PWM, no MUX
-    DEFAULT_MUX,				// Pin 9 - PWM, no MUX
-    ALTERNATE_MUX,				// Pin 10 - PWM uses alternate MUX
-    DEFAULT_MUX,			    // Pin 11 - PWM uses default MUX
-    DEFAULT_MUX,			    // Pin 12 - PWM uses default MUX
-    DEFAULT_MUX,			    // Pin 13 - PWM uses default MUX
-    DEFAULT_MUX,			    // Pin 14 - No PWM
-    DEFAULT_MUX,			    // Pin 15 - No PWM
-    DEFAULT_MUX,			    // Pin 16 - No PWM
-    DEFAULT_MUX,			    // Pin 17 - No PWM
-    DEFAULT_MUX,			    // Pin 18 - No PWM
-    DEFAULT_MUX				    // Pin 19 - No PWM
+        DEFAULT_MUX,				// Pin 1 - No PWM
+        DEFAULT_MUX,				// Pin 2 - No PWM
+        ALTERNATE_MUX,				// Pin 3 - PWM uses alternate MUX
+        DEFAULT_MUX,				// Pin 4 - No PWM, no MUX
+        DEFAULT_MUX,				// Pin 5 - PWM, no MUX
+        DEFAULT_MUX,				// Pin 6 - PWM, no MUX
+        DEFAULT_MUX,				// Pin 7 - PWM, no MUX
+        DEFAULT_MUX,				// Pin 8 - PWM, no MUX
+        DEFAULT_MUX,				// Pin 9 - PWM, no MUX
+        ALTERNATE_MUX,				// Pin 10 - PWM uses alternate MUX
+        DEFAULT_MUX,			    // Pin 11 - PWM uses default MUX
+        DEFAULT_MUX,			    // Pin 12 - PWM uses default MUX
+        DEFAULT_MUX,			    // Pin 13 - PWM uses default MUX
+        DEFAULT_MUX,			    // Pin 14 - No PWM
+        DEFAULT_MUX,			    // Pin 15 - No PWM
+        DEFAULT_MUX,			    // Pin 16 - No PWM
+        DEFAULT_MUX,			    // Pin 17 - No PWM
+        DEFAULT_MUX,			    // Pin 18 - No PWM
+        DEFAULT_MUX				    // Pin 19 - No PWM
 };
 
 // This table maps PWM pin numbers to I/O Expander pins.
-const UCHAR _PwmPinMap[NUM_ARDUINO_PINS]
+const uint8_t _PwmPinMap[NUM_ARDUINO_PINS]
 {
     0,							// Pin 0 - No PWM
-    0,							// Pin 1 - No PWM
-    0,							// Pin 2 - No PWM
-    GPORT0_BIT2_PWM3,			// Pin 3 - PWM 3
-    0,							// Pin 4 - No PWM
-    GPORT0_BIT1_PWM5,			// Pin 5 - PWM 5
-    GPORT1_BIT0_PWM6,			// Pin 6 - PWM 6
-    GPORT1_BIT3_PWM0,			// Pin 7 - PWM 0
-    GPORT1_BIT2_PWM2,			// Pin 8 - PWM 2
-    GPORT0_BIT3_PWM1,			// Pin 9 - PWM 1
-    GPORT0_BIT0_PWM7,			// Pin 10 - PWM 7
-    GPORT1_BIT1_PWM4,			// Pin 11 - PWM 4
-    0,							// Pin 12 - No PWM
-    0,							// Pin 13 - No PWM
-    0,							// Pin 14 - No PWM
-    0,							// Pin 15 - No PWM
-    0,							// Pin 16 - No PWM
-    0,							// Pin 17 - No PWM
-    0,							// Pin 18 - No PWM
-    0							// Pin 19 - No PWM
+        0,							// Pin 1 - No PWM
+        0,							// Pin 2 - No PWM
+        GPORT0_BIT2_PWM3,			// Pin 3 - PWM 3
+        0,							// Pin 4 - No PWM
+        GPORT0_BIT1_PWM5,			// Pin 5 - PWM 5
+        GPORT1_BIT0_PWM6,			// Pin 6 - PWM 6
+        GPORT1_BIT3_PWM0,			// Pin 7 - PWM 0
+        GPORT1_BIT2_PWM2,			// Pin 8 - PWM 2
+        GPORT0_BIT3_PWM1,			// Pin 9 - PWM 1
+        GPORT0_BIT0_PWM7,			// Pin 10 - PWM 7
+        GPORT1_BIT1_PWM4,			// Pin 11 - PWM 4
+        0,							// Pin 12 - No PWM
+        0,							// Pin 13 - No PWM
+        0,							// Pin 14 - No PWM
+        0,							// Pin 15 - No PWM
+        0,							// Pin 16 - No PWM
+        0,							// Pin 17 - No PWM
+        0,							// Pin 18 - No PWM
+        0							// Pin 19 - No PWM
 };
 
 // This array stores state and configuration information for each GPIO pin.
@@ -390,7 +434,7 @@ __declspec (selectany) PIN_DATA _pinData[NUM_ARDUINO_PINS] = { 0 };
 // The "inline" marks the function as "selectany", while "__declspec (noinline)"
 // keeps it from actually being expanded inline.  Without the "inline" the linker
 // will complain about multiple definitions of the same routine name.
-__declspec (noinline) inline void _ReadPinConfiguration(int pin, PPIN_DATA pinData)
+__declspec (noinline) inline void _InitPinConfiguration(int pin, PPIN_DATA pinData)
 {
     int i;
     BYTE portConfig[PORT_CONFIG_REG_COUNT] = { 0 };
@@ -424,13 +468,13 @@ __declspec (noinline) inline void _ReadPinConfiguration(int pin, PPIN_DATA pinDa
     if ((portConfig[PIN_DIRECTION] & (1 << _ArduinoToPortBitMap[pin].BitNumber)) == 0)
     {
         pinData->currentMode = OUTPUT;
-        pinData->modeSet = OUTPUT;
     }
     else
     {
         pinData->currentMode = INPUT;
-        pinData->modeSet = INPUT;
     }
+
+    pinData->modeSet = INPUT;  // This variable is used to track last explicitly set mode state, during initialization it is expected to be the default value - INPUT.
 
     // If the port pin is configured as a PMW:
     if ((portConfig[SELECT_PWM] & (1 << _ArduinoToPortBitMap[pin].BitNumber)) != 0)
@@ -468,7 +512,7 @@ __declspec (noinline) inline void _ReadPinConfiguration(int pin, PPIN_DATA pinDa
     }
 }
 
-__declspec (noinline) inline void _ReadPinMuxConfig(int pin, PPIN_DATA pinData)
+__declspec (noinline) inline void _InitPinMuxConfig(int pin, PPIN_DATA pinData)
 {
     unsigned int gpioMux;
     BYTE muxConfig;
@@ -497,19 +541,17 @@ __declspec (noinline) inline void _ReadPinMuxConfig(int pin, PPIN_DATA pinData)
         if (muxConfig == gpioMux)
         {
             pinData->currentMux = DEFAULT_MUX;
-            pinData->muxSet = DEFAULT_MUX;
         }
         else
         {
             pinData->currentMux = ALTERNATE_MUX;
-            pinData->muxSet = ALTERNATE_MUX;
         }
     }
     else
     {
         pinData->currentMux = DEFAULT_MUX;
-        pinData->muxSet = DEFAULT_MUX;
     }
+    pinData->muxSet = DEFAULT_MUX;  // This variable is used to track last explicitly set mux state, during initialization it is expected to be the default value - DEFAULT_MUX.
 }
 
 inline void _InitializePinIfNeeded(int pin)
@@ -526,7 +568,7 @@ __declspec (noinline) inline void _InitializePin(int pin)
 {
     // Get the current state of the I2C MUX.
     bool I2cWasEnabled = Wire.getI2cHasBeenEnabled();
-	bool done = false;
+    bool done = false;
 
     Wire.begin();
 
@@ -543,16 +585,16 @@ __declspec (noinline) inline void _InitializePin(int pin)
         if (_ArduinoToGalileoPinMap[pin] >= GPORT0_BIT0_PWM7)
         {
             // Read the pin configuration from the CY8C9540A I/O Expander.
-            _ReadPinConfiguration(pin, &(_pinData[pin]));
+            _InitPinConfiguration(pin, &(_pinData[pin]));
 
             // Indicate the data for this pin is now initialized.
             _pinData[pin].pinInitialized = TRUE;
-		
-			done = true;
-		}
+
+            done = true;
+        }
 
         // Read the MUX configuration for this pin.
-        _ReadPinMuxConfig(pin, &(_pinData[pin]));
+        _InitPinMuxConfig(pin, &(_pinData[pin]));
     }
     catch (const _arduino_fatal_error &)
     {
@@ -568,16 +610,16 @@ __declspec (noinline) inline void _InitializePin(int pin)
         _pinData[pin].currentMode = OUTPUT;			// Force update of pin direction
         pinMode(pin, INPUT);
 
-		// If this is a PWM pin:
-		if (_PwmPinMap[pin] != 0)
-		{
-			// If the MUX is set to alternate:
-			if (_pinData[pin].currentMux == ALTERNATE_MUX)
-			{
-				// Indicate that PWM is enabled on this pin.
-				_pinData[pin].pwmIsEnabled = TRUE;
-			}
-		}
+        // If this is a PWM pin:
+        if (_PwmPinMap[pin] != 0)
+        {
+            // If the MUX is set to alternate:
+            if (_pinData[pin].currentMux == ALTERNATE_MUX)
+            {
+                // Indicate that PWM is enabled on this pin.
+                _pinData[pin].pwmIsEnabled = TRUE;
+            }
+        }
     }
 
     // If the pin is an SPI pin:
@@ -655,7 +697,7 @@ inline void digitalWrite(unsigned int pin, unsigned int state)
 
     if (!_pinData[pin].stateIsKnown || (_pinData[pin].state != state))
     {
-        HRESULT hr = GpioWrite(_ArduinoToGalileoPinMap[pin], (ULONG)state);
+        HRESULT hr = GpioWrite(_ArduinoToGalileoPinMap[pin], (ULONG) state);
         if (FAILED(hr))
         {
             ThrowError("GpioWrite() failed. pin=%d, state=%d", pin, state);
@@ -684,15 +726,15 @@ inline int digitalRead(int pin)
 
     // Revert the pin if it is in PWM mode.
     _RevertPinToDigital(pin);
-    
+
     LONG ret;
     HRESULT hr = GpioRead(_ArduinoToGalileoPinMap[pin], &ret);
-    if ( FAILED(hr) )
+    if (FAILED(hr))
     {
         ThrowError("GpioRead() failed to read pin %d: 0x%x", pin, hr);
     }
 
-    return (int)ret;
+    return (int) ret;
 }
 
 //
@@ -710,11 +752,11 @@ inline void pinMode(unsigned int pin, unsigned int mode)
     _ValidatePinOkToChange(pin);
     _InitializePinIfNeeded(pin);
 
-	if (_pinData[pin].pwmIsEnabled)
-	{
-		PwmStop(_PwmPinMap[pin]);
-		_pinData[pin].pwmIsEnabled = FALSE;
-	}
+    if (_pinData[pin].pwmIsEnabled)
+    {
+        PwmStop(_PwmPinMap[pin]);
+        _pinData[pin].pwmIsEnabled = FALSE;
+    }
 
     if (_pinData[pin].currentMode != mode)
     {
@@ -723,9 +765,9 @@ inline void pinMode(unsigned int pin, unsigned int mode)
         {
             ThrowError("GpioSetDir() failed. pin = %d, mode = %d", pin, mode);
         }
-        _pinData[pin].modeSet = mode;
         _pinData[pin].currentMode = mode;
     }
+    _pinData[pin].modeSet = mode;
 }
 
 //
@@ -762,7 +804,7 @@ inline void _RevertImplicitPinMode(unsigned int pin)
 inline bool _SetImplicitPinFunction(ULONG pin, ULONG function)
 {
     _InitializePinIfNeeded(pin);
-    
+
     unsigned int mux = _GalileoMuxMap[pin];
 
     if (mux != NOT_MUXED)
@@ -868,79 +910,29 @@ inline void _RevertPinToDigital(int pin)
     _RevertImplicitPinMode(pin);
 }
 
-//
-// Perform an analog write (PWM) operation.
-//
-// INPUTS:
-//	pin - The Arduino GPIO pin on which to generate the pulse train.
-//        This can be pin 3, 5, 6, 7, 8, 9, 10, or 11.
-//
-//  value - The analong value, which translates to the duty cycle of 
-//        the pulse train.  Range: 0-255
-//        0 - 0% duty cycle (no pulses are generated, output is LOW)
-//		  128 - 50% duty cycle (pulse train is HIGH 50% of the time)
-//        255 - 100% duty cycle (pulse train is HIGH continuously)
-//
-// NOTES:
-//  A pulse frequency of 100hz is requested, which will actually get 
-//  us about 92 hz (with clock granularity), or 92 pulses per second.
-//
-inline void analogWrite(int pin, int value)
-{
-    _ValidatePwmPin(pin);
-    _ValidatePinOkToChange(pin);
-	_InitializePinIfNeeded(pin);
-
-    HRESULT hr = ERROR_SUCCESS;
-    ULONG dutyCycleIn = value & 255UL;	// Limit duty cycle to 100%
-
-    // Scale the duty cycle to the range used by the driver.
-    // From 0-255 to 0-PWM_MAX_DUTYCYCLE, rounding to nearest value.
-    ULONG dutyCycle = ((dutyCycleIn * PWM_MAX_DUTYCYCLE) + 127UL) / 255UL;
-
-    // If PWM operation is not currently enabled on this pin:
-    if (!_pinData[pin].pwmIsEnabled)
-    {
-        // Prepare the pin for PWM use.
-        _PinFunction(pin, _PwmMuxFunction[pin]);
-        _SetImplicitPinMode(pin, OUTPUT);
-        _pinData[pin].stateIsKnown = FALSE;
-
-        // Start PWM on the pin.
-        hr = PwmStart(_PwmPinMap[pin], PWM_HZ, dutyCycle);
-        if (FAILED(hr))
-        {
-            ThrowError("PwmStart() failed. pin=%d, freq=100hz, dutyCycle=%d",
-                pin, dutyCycleIn);
-        }
-        _pinData[pin].pwmIsEnabled = TRUE;
-        _pinData[pin].pwmDutyCycle = dutyCycleIn;
-    }
-
-    // If PWM operation is enabled on this pin, and duty cycle is being changed:
-    else if (_pinData[pin].pwmDutyCycle != dutyCycleIn)
-    {
-        hr = PwmSetDutyCycle(_PwmPinMap[pin], dutyCycle);
-        if (FAILED(hr))
-        {
-            ThrowError("PwmSetDutyCycle() failed. pin=%d, dutyCycle=%d",
-                pin, dutyCycleIn);
-        }
-        _pinData[pin].pwmDutyCycle = dutyCycleIn;
-    }
-}
-
 class ArduinoStatic
 {
 
 public:
+    // These defines and struct are used for tone functions
+#define _MILLISECOND 10000
+
+    // what the map means:
+    // pin, nullptr = tone on, but no timer
+    // pin, valid handle = tone on, timer on
+    // pin not found = no tone running on pin
+    typedef std::map<int, HANDLE> TonePinMap;
+    static TonePinMap tpMap;
+
     ArduinoStatic() :
-        adc(nullptr)
+        adc(nullptr),
+        _analog_read_resolution(10),
+        _analog_write_resolution(8)
     { }
 
     ~ArduinoStatic()
     {
-        if ( this->adc != nullptr )
+        if (this->adc != nullptr)
         {
             AdcFree(this->adc);
             this->adc = nullptr;
@@ -949,44 +941,155 @@ public:
 
     void begin()
     {
-        if ( this->adc == nullptr )
+        if (this->adc == nullptr)
         {
             HRESULT hr = AdcCreateInstance(ADC_CONTROLLER_INDEX, &this->adc);
-            if ( FAILED(hr) )
+            if (FAILED(hr))
             {
                 ThrowError("Failed to initialized Analog");
             }
         }
     }
 
-    //
-    // Reads the value from the specified analog pin.
-    // pin should be the analog pin number (0-5)
-    //
-    int analogRead(int pin)
-    {
-		LONG pinL = pin;
+    // These defines and struct are used for tone functions
 
-		// Allow for pins to be specified as A0-A5.
-		if ((pinL >= A0) && (pinL <= A5))
-		{
-			pinL = pinL - A0;
-		}
+#define _MILLISECOND 10000
+
+    ///
+    /// \brief The callback for timers set up during a tone with duration
+    /// \details This will stop a PWM wave on the designated pin
+    /// \param [in] lpArg a (VOID *) that is the data being passed into it
+    /// \param [in] dwTimerLowValue
+    /// \param [in] dwTimerHighValue
+    ///
+    static VOID CALLBACK TimeProcStopTone(LPVOID lpArg, DWORD dwTimerLowValue, DWORD dwTimerHighValue)
+    {
+        int pin = reinterpret_cast<int>(lpArg);
+        noTone(pin);
+    }
+
+    void tone(int pin, unsigned int frequency)
+    {
+        // Generates and starts the square wave of designated frequency at 50% duty cycle
+        // Cannot generate tones lower than 31Hz
+        _ValidatePwmPin(pin);
+        _ValidatePinOkToChange(pin);
+        _InitializePinIfNeeded(pin);
+
+        HRESULT hr = ERROR_SUCCESS;
+
+        // Scale the duty cycle to the range used by the driver.
+        // From 0-255 to 0-PWM_MAX_DUTYCYCLE, rounding to nearest value.
+        ULONG dutyCycle = ((255UL / 2 * PWM_MAX_DUTYCYCLE) + 127UL) / 255UL; // gives us a 50% duty cycle
+
+        noTone(pin);
+        // no tone running on pin
+        // If PWM operation is not currently enabled on this pin:
+        if (!_pinData[pin].pwmIsEnabled)
+        {
+            // Prepare the pin for PWM use.
+            _PinFunction(pin, _PwmMuxFunction[pin]);
+            _SetImplicitPinMode(pin, OUTPUT);
+            _pinData[pin].stateIsKnown = FALSE;
+
+            // Start PWM on the pin.
+            hr = PwmStart(_PwmPinMap[pin], frequency, dutyCycle);
+            if (FAILED(hr))
+            {
+                ThrowError("PwmStart() failed. pin=%d, freq=100hz", pin);
+            }
+            _pinData[pin].pwmIsEnabled = TRUE;
+            _pinData[pin].pwmDutyCycle = 255UL / 2;
+            tpMap.insert({ pin, NULL });
+        }
+        // If PWM operation is enabled on this pin:
+        else
+        {
+            // Since we have no driver function to change a PWM Frequency, we will have to stop it and restart it with the new frequency.
+            PwmStop(_PwmPinMap[pin]);
+            hr = PwmStart(_PwmPinMap[pin], frequency, dutyCycle);
+            if (FAILED(hr))
+            {
+                ThrowError("PwmStart() failed. pin=%d, freq=100hz", pin);
+            }
+            _pinData[pin].pwmDutyCycle = 255UL / 2;
+            tpMap.insert({ pin, NULL });
+        }
+    }
+
+    void tone(int pin, unsigned int frequency, unsigned long duration)
+    {
+        // Generates and starts the square wave
+        tone(pin, frequency);
+
+        HANDLE timerHandle = CreateWaitableTimerEx(NULL, NULL, 0, TIMER_ALL_ACCESS);
+
+        if (timerHandle == NULL)
+        {
+            DWORD err = GetLastError();
+            ThrowError("Error creating timer for tone: %d", err);
+        }
+
+        LARGE_INTEGER timerDueTime;
+
+        // Timing is done in 100 nanosecond units
+        int64_t qwDueTime = -1 * (int64_t)duration * _MILLISECOND; // typecast is allowed since unsigned long is smaller than int64
+
+        // Copy the relative time into a LARGE_INTEGER.
+        timerDueTime.LowPart = (DWORD)(qwDueTime & 0xFFFFFFFF);
+        timerDueTime.HighPart = (LONG)(qwDueTime >> 32);
+
+        if (SetWaitableTimer(timerHandle, &timerDueTime, 0, TimeProcStopTone, (VOID *)pin, FALSE) == 0)
+        {
+            DWORD err = GetLastError();
+            ThrowError("Error setting waitable timer for tone: %d", err);
+        }
+        else
+        {
+            // change the TonePinMap value to show that there is in fact a waitable timer
+            auto result = tpMap.find(pin);
+            if (result != tpMap.end()) // is it in map and has a timer
+            {
+                tpMap.erase(pin);
+                tpMap.insert({ pin, timerHandle });
+            }
+        }
+
+    }
+
+    uint32_t analogRead(int32_t pin)
+    {
+        int32_t pinL = pin;
+        uint32_t result = 0;
+
+        // Allow for pins to be specified as A0-A5.
+        if ((pinL >= A0) && (pinL <= A5))
+        {
+            pinL = pinL - A0;
+        }
 
         // special value -1 means temp sense conversion
-        if ( (pinL < -1) || (pinL >= NUM_ANALOG_PINS) )
+        if ((pinL < -1) || (pinL >= NUM_ANALOG_PINS))
         {
-			ThrowError("Invalid pin number (%d). Pin must be in the range [-1, %d] or [A0, A5].\n",
+            ThrowError("Invalid pin number (%d). Pin must be in the range [-1, %d] or [A0, A5].\n",
                 pinL, NUM_ANALOG_PINS);
         }
 
-        if ( this->adc == nullptr )
+        if (this->adc == nullptr)
         {
             ThrowError("Arduino not initialized");
         }
 
-        LONG result = AdcSampleChannel(this->adc, (ULONG) pinL);
-        if ( result < 0 )
+        if (ADC_RESOLUTION >= _analog_read_resolution)
+        {
+            result = AdcSampleChannel(this->adc, (uint32_t) pinL) >> (ADC_RESOLUTION - _analog_read_resolution);
+        }
+        else
+        {
+            result = AdcSampleChannel(this->adc, (uint32_t) pinL) << (_analog_read_resolution - ADC_RESOLUTION);
+        }
+
+        if (result < 0)
         {
             ThrowError("AdcSampleChannel failed");
         }
@@ -994,8 +1097,72 @@ public:
         return result;
     }
 
+    void analogWrite(const uint8_t pin, const uint32_t value)
+    {
+        _ValidatePwmPin(pin);
+        _ValidatePinOkToChange(pin);
+        _InitializePinIfNeeded(pin);
+
+        HRESULT hr = ERROR_SUCCESS;
+        const uint32_t pwm_max_value = ((static_cast<uint64_t>(1) << _analog_write_resolution) - 1);
+
+        // Test the required resolution for the value parameter
+        if (value > pwm_max_value) { ThrowError("Analog value too large for current resolution -%u-", _analog_write_resolution); }
+
+        // Scale the duty cycle to the range used by the driver.
+        // From 0-pwm_max_value to 0-PWM_MAX_DUTYCYCLE (rounded).
+        uint32_t dutyCycle = static_cast<uint32_t>(((static_cast<uint64_t>(value) * PWM_MAX_DUTYCYCLE) + (PWM_MAX_DUTYCYCLE >> 1)) / pwm_max_value);
+
+        constrain(dutyCycle, 0, 65535);
+
+        // If PWM operation is not currently enabled on this pin:
+        if (!_pinData[pin].pwmIsEnabled)
+        {
+            // Prepare the pin for PWM use.
+            _PinFunction(pin, _PwmMuxFunction[pin]);
+            _SetImplicitPinMode(pin, OUTPUT);
+            _pinData[pin].stateIsKnown = FALSE;
+
+            // Start PWM on the pin.
+            hr = PwmStart(_PwmPinMap[pin], PWM_HZ, dutyCycle);
+            if (FAILED(hr))
+            {
+                ThrowError("PwmStart() failed. pin=%d, freq=100hz, dutyCycle=%d", pin, value);
+            }
+            _pinData[pin].pwmIsEnabled = TRUE;
+            _pinData[pin].pwmDutyCycle = dutyCycle;
+        }
+
+        // If PWM operation is enabled on this pin, and duty cycle is being changed:
+        else if (_pinData[pin].pwmDutyCycle != dutyCycle)
+        {
+            hr = PwmSetDutyCycle(_PwmPinMap[pin], dutyCycle);
+            if (FAILED(hr))
+            {
+                ThrowError("PwmSetDutyCycle() failed. pin=%d, dutyCycle=%d", pin, value);
+            }
+            _pinData[pin].pwmDutyCycle = dutyCycle;
+        }
+    }
+
+    void analogReference(const uint8_t reference_voltage) {
+        if (DEFAULT != reference_voltage) { ThrowError("Unsupported voltage set as analog reference!"); }
+    }
+
+    void analogReadResolution(const uint8_t resolution) {
+        if (resolution > (sizeof(uint32_t) * 8)) { ThrowError("Invalid analog read resolution!"); }
+        _analog_read_resolution = resolution;
+    }
+
+    void analogWriteResolution(const uint8_t resolution) {
+        if (resolution > (sizeof(uint32_t) * 8)) { ThrowError("Invalid analog read resolution!"); }
+        _analog_write_resolution = resolution;
+    }
+
 private:
     ADC *adc;
+    uint8_t _analog_read_resolution;
+    uint8_t _analog_write_resolution;
 };
 
 __declspec (selectany) ArduinoStatic _ArduinoStatic;
@@ -1009,19 +1176,96 @@ inline void ArduinoInit()
     GpioWrite(QRK_LEGACY_RESUME_SUS2, HIGH);
 }
 
-inline int analogRead(int channel)
+/// \brief Reads the value from the specified analog pin.
+/// \param [in] pin should be the analog pin number (A0-A5)
+/// \returns The numerator of a ratio of input voltage over
+/// reference voltage, which is represented as 2^analogReadResolution(x).
+inline uint32_t analogRead(int32_t pin)
 {
-    return _ArduinoStatic.analogRead(channel);
+    return _ArduinoStatic.analogRead(pin);
+}
+
+/// \brief Perform an analog write (PWM) operation.
+/// \param [in] pin The Arduino GPIO pin on which to generate
+/// the pulse train. Pins 3, 5, 6, 7, 8, 9, 10, or 11 are valid.
+/// \param [in] value The analong value, which translates to the
+/// duty cycle of the pulse train. Range: 0-2^analogWriteResolution(x)
+/// - 0 - 0% duty cycle (no pulses are generated, output is LOW)
+/// - 2^analogWriteResolution(x) - 100% duty cycle (pulse train is HIGH
+/// continuously)
+/// \note A pulse frequency of 100hz is requested, which will actually get 
+/// us about 92 hz (with clock granularity), or 92 pulses per second.
+inline void analogWrite(const uint8_t pin, const uint32_t value)
+{
+    return _ArduinoStatic.analogWrite(pin, value);
+}
+
+/// \brief Sets the size(in bits) of the value returned by analogRead().
+/// \param [in] resolution The number of bits used to represent a voltage
+/// equal to the reference volatage (5V0).
+/// \note It defaults to 10 bits(returns values between 0 - 1023) for
+/// backward compatibility with AVR based boards.
+/// \note The Galileo has 12 - bit ADC capabilities that can be accessed
+/// by changing the resolution to 12. This will return values from analogRead()
+/// between 0 and 4095.
+/// \warning Unlike Arduino, if you set the analogReadResolution() value to a
+/// value lower or higher than your board's capabilities, your input will be
+/// scaled as accurately as possible.
+inline void analogReadResolution(const uint8_t resolution)
+{
+    return _ArduinoStatic.analogReadResolution(resolution);
+}
+
+/// \brief Sets the resolution (in bits) of the values accepted by analogWrite().
+/// \details Sets the resolution (in bits) of the values accepted by analogWrite().
+/// The underlying driver has 16-bit PWM resolution. You will lose accuracy if
+/// you choose an alternative resolution.
+/// a value less than 16, the value passed to analogWrite() will be padded
+/// with zeros. On the other hand, any value greater than 16 the other bits
+/// will be truncated.
+/// \param [in] resolution The number of bits used to represent
+/// a 100% duty cycle - valid range: 1-32 (i.e. 10 [bits] -> 1023 [max value]).
+/// \note The default write resolution is 8-bit (values between 0 - 255)
+/// for backward compatibility with AVR based boards.
+/// \note There is not a dedicated DAC chip, instead the on-board
+/// GPIO expander provides PWM support with 8-bit resolution.
+/// \warning Unlike Arduino, if you set the analogWriteResolution() value to a
+/// value lower or higher than your board's capabilities, your input will be
+/// scaled as accurately as possible.
+inline void analogWriteResolution(const uint8_t resolution)
+{
+    return _ArduinoStatic.analogWriteResolution(resolution);
+}
+
+/// \brief Sets the reference voltage for the analog to digital converter
+/// \details This method sets the reference voltage for the analog to digital
+/// converter
+/// \param [in] reference_voltage This value is used to represent the
+/// maximum voltage expected as input on the analog pins A0 - A5
+/// \note An equal voltage would be represented as 1023 with 10-bit read
+/// resolution
+/// \note The Galileo hardware only supports 5V reference, regardless of
+/// whether or not the jumper is set to 3V3 or 5V
+/// \note The AREF pin on the Galileo is only wired to a capacitor and
+/// nothing else, rendering it effectively useless
+/// \warning Only the DEFAULT value is supported
+/// \exception _arduino_fatal_error This error is thrown when any reference
+/// voltage other than DEFAULT is used.
+/// \see ReferenceVoltage
+inline void analogReference(const uint8_t reference_voltage)
+{
+    return _ArduinoStatic.analogReference(reference_voltage);
 }
 
 inline uint8_t shiftIn(uint8_t data_pin_, uint8_t clock_pin_, uint8_t bit_order_)
 {
     uint8_t buffer(0);
 
-    for (uint8_t loop_count = 0, bit_index = 0 ; loop_count < 8 ; ++loop_count) {
+    for (uint8_t loop_count = 0, bit_index = 0; loop_count < 8; ++loop_count) {
         if (bit_order_ == LSBFIRST) {
             bit_index = loop_count;
-        } else {
+        }
+        else {
             bit_index = (7 - loop_count);
         }
 
@@ -1038,7 +1282,8 @@ inline void shiftOut(uint8_t data_pin_, uint8_t clock_pin_, uint8_t bit_order_, 
     for (uint8_t loop_count = 0, bit_mask = 0; loop_count < 8; ++loop_count) {
         if (bit_order_ == LSBFIRST) {
             bit_mask = (1 << loop_count);
-        } else {
+        }
+        else {
             bit_mask = (1 << (7 - loop_count));
         }
 
@@ -1050,12 +1295,91 @@ inline void shiftOut(uint8_t data_pin_, uint8_t clock_pin_, uint8_t bit_order_, 
     return;
 }
 
+// Tone function calls
+__declspec (selectany) ArduinoStatic::TonePinMap ArduinoStatic::tpMap;
+
+///
+/// \brief Performs a tone operation.
+/// \details This will start a PWM wave on the designated pin of the
+/// inputted frequency with 50% duty cycle
+/// \param [in] pin - The Arduino GPIO pin on which to generate the pulse train.
+///        This can be pin 3, 5, 6, 7, 8, 9, 10, or 11.
+/// \param [in] frequency - in Hertz
+///
+inline void tone(int pin, unsigned int frequency)
+{
+    _ArduinoStatic.tone(pin, frequency);
+}
+
+///
+/// \brief Performs a tone operation.
+/// \details This will start a PWM wave on the designated pin of the
+/// inputted frequency with 50% duty cycle and set up a timer to trigger
+/// a callback after the inputted duration
+/// \param [in] pin - The Arduino GPIO pin on which to generate the pulse train.
+///        This can be pin 3, 5, 6, 7, 8, 9, 10, or 11.
+/// \param [in] frequency - in Hertz
+/// \param [in] duration - in milliseconds
+///
+inline void tone(int pin, unsigned int frequency, unsigned long duration)
+{
+    _ArduinoStatic.tone(pin, frequency, duration);
+}
+
+///
+/// \brief Performs a noTone operation.
+/// \details This will stop a PWM wave on the designated pin if there is
+/// a tone running on it
+/// \param [in] pin - The Arduino GPIO pin on which to generate the pulse train.
+///        This can be pin 3, 5, 6, 7, 8, 9, 10, or 11.
+///
+static void noTone(int pin)
+{
+    auto result = _ArduinoStatic.tpMap.find(pin);
+    if (result != _ArduinoStatic.tpMap.end()) // the pin has a tone running on it
+    {
+        if (result->second == NULL)
+        {
+            // tone is running on pin without a timer, so stop it and remove it from map
+            PwmStop(_PwmPinMap[pin]);
+            _ArduinoStatic.tpMap.erase(pin);
+        }
+        else
+        {
+            // tone is running on a pin with a timer, so stop the timer, stop the tone, and remove it from map
+            if (!CancelWaitableTimer(result->second))
+            {
+                DWORD err = GetLastError();
+                ThrowError("Error canceling waitable timer in tone: %d", err);
+            }
+            if (!CloseHandle(result->second))
+            {
+                DWORD err = GetLastError();
+                ThrowError("Error closing waitable timer Handle in tone: %d", err);
+            }
+            PwmStop(_PwmPinMap[pin]);
+            _ArduinoStatic.tpMap.erase(pin);
+        }
+    }
+}
+
 //
 // Arduino Sketch Plumbing
 //
 
+#include "Stream.h"
+#include "HardwareSerial.h"
+#include "WInterrupt.h"
+
 void setup();
 void loop();
+
+#ifdef SERIAL_EVENT
+void serialEvent();
+#endif
+#ifdef SERIAL_EVENT1
+void serialEvent1();
+#endif
 
 inline int RunArduinoSketch()
 {
@@ -1065,18 +1389,36 @@ inline int RunArduinoSketch()
     {
         ArduinoInit();
         setup();
-        while ( 1 )
+        while (1)
         {
+            // This call is used to handle async procedure calls (APCs); usually by timers
+            // This call will relinquish the remainder of its time slice to another 
+            // ready to run thread of equal priority. However, in practice it is 
+            // a no-op unless there's a pending APC. 
+            SleepEx(0, TRUE);
+
             loop();
+            #ifdef SERIAL_EVENT
+            if (Serial && Serial.available() > 0)
+            {
+                serialEvent();
+            }
+            #endif
+            #ifdef SERIAL_EVENT1
+            if (Serial1 && Serial1.available() > 0)
+            {
+                serialEvent1();
+            }
+            #endif
         }
     }
-    catch ( const _arduino_fatal_error &ex )
+    catch (const _arduino_fatal_error &ex)
     {
         ret = 1;
-        Log(L"\nSketch Aborted! A fatal error has occurred:\n");
-        printf("%s\n", ex.what());
+        Log("\nSketch Aborted! A fatal error has occurred:\n");
+        Log("%s\n", ex.what());
     }
-    catch ( const _arduino_quit_exception & )
+    catch (const _arduino_quit_exception &)
     {
         // exit cleanly
     }
@@ -1117,7 +1459,7 @@ inline long random(long min, long max)
     return random(diff) + min;
 }
 
-inline uint16_t makeWord(unsigned char h, unsigned char l) { return (h << 8) | l; }
+inline uint16_t makeWord(uint8_t h, uint8_t l) { return (h << 8) | l; }
 #define word(x, y) makeWord(x, y)
 
 // Bits and Bytes
@@ -1132,7 +1474,15 @@ inline uint16_t makeWord(unsigned char h, unsigned char l) { return (h << 8) | l
 #define bit(b) (1UL << (b))
 #define __attribute__(x)
 
-#include "Stream.h"
-#include "HardwareSerial.h"
+
+// Other utility Macros
+// Turn passed in value into a string
+#define STRINGIFY(x) #x
+// Turn passed in macro into a string
+#define STRINGIFY_MACRO(x) STRINGIFY(x)
+
+inline float radians(float deg) { return deg * 180 / PI; }
+inline float degrees(float rad) { return rad * PI / 180; }
+
 #include "Wire.h"
 #endif // _WINDOWS_ARDUINO_H_
