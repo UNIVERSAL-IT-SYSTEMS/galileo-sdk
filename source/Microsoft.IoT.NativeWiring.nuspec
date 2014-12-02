@@ -4,8 +4,8 @@
     <id>Microsoft.IoT.NativeWiring</id>
     <version>1.0.0</version>
     <title>Microsoft IoT C++ SDK</title>
-    <authors>Microsoft Corporation</authors>
-    <owners>Microsoft Corporation</owners>
+    <authors>Microsoft Open Technologies, Inc.</authors>
+    <owners>Microsoft Open Technologies, Inc.</owners>
     <licenseUrl>http://www.microsoft.com/en-us/legal/intellectualproperty/copyright/default.aspx</licenseUrl>
     <projectUrl>https://www.windowsondevices.com/</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
