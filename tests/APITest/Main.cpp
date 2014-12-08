@@ -23,6 +23,11 @@ void setup()
 
     // Test binary.h inclusion from arduino-sdk
     uint8_t byte = B10101010;
+    Log("CHECK: %s | \"B\" prefix for byte constants\n", (byte = 0xAA) ? "Pass" : "FAILED");
+
+    // Test #define constrain()
+    int x = 257;
+    Log("CHECK: %s | ::constrain()\n", (constrain(constrain(x, 0, 256), 0, 255) == 255) ? "Pass" : "FAILED");
 
     // Call/test ...
     // next test here
