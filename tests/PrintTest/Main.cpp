@@ -8,8 +8,7 @@
 class PrintableTester : public Printable
 {
 public:
-	using Printable::printTo;
-	inline size_t PrintableTester::printTo(Print &p)
+	virtual inline size_t PrintableTester::printTo(Print &p) const
 	{
 		p.print("It's a printable");
 		return sizeof("It's a printable");
