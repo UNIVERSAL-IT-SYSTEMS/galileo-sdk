@@ -8,6 +8,7 @@
 #include <Windows.h>
 #include "ADC108S102Support.h"
 #include "AD7298Support.h"
+#include "GalileoPins.h"
 
 class AdcClass
 {

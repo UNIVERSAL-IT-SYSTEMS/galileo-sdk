@@ -29,20 +29,19 @@
 #endif
 #include <math.h>
 
+#include "Adc.h"
 #include "ArduinoCommon.h"
 #include "ArduinoError.h"
+#include "binary.h"
+#include "HardwareSerial.h"
+#include "Stream.h"
 #include "WindowsRandom.h"
 #include "WindowsTime.h"
-#include "GalileoPins.h"
-#include "binary.h"
+#include "WInterrupt.h"
+#include "WString.h"
 #include "wire.h"
-#include "Adc.h"
-
-#include <memory>
-#include <map>
-#include <vector>
-#include <algorithm>
 #include "avr/macros.h"
+
 
 #define NUM_ARDUINO_PINS 20
 #define NUM_ANALOG_PINS 6
@@ -504,10 +503,6 @@ void noTone(int pin);
 // Arduino Sketch Plumbing
 //
 
-#include "Stream.h"
-#include "HardwareSerial.h"
-#include "WInterrupt.h"
-
 void setup();
 void loop();
 
@@ -625,5 +620,4 @@ inline uint16_t makeWord(uint8_t h, uint8_t l) { return (h << 8) | l; }
 inline float radians(float deg) { return deg * 180.0f / static_cast<float>(PI); }
 inline float degrees(float rad) { return rad * static_cast<float>(PI) / 180.0f; }
 
-#include "Wire.h"
 #endif // _WINDOWS_ARDUINO_H_
