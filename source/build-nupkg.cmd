@@ -32,10 +32,10 @@ echo Copying files into nuget package structure
 copy Microsoft.IoT.NativeWiring.nuspec nupkg /y || goto err
 copy Microsoft.IoT.NativeWiring.targets nupkg\build\native /y || goto err
 
-if exist (*.h) copy *.h nupkg\build\native\include /y || goto err
-if exist (avr\*.h) copy avr\*.h nupkg\build\native\include\avr /y || goto err
+if exist *.h (copy *.h nupkg\build\native\include /y) || goto err
+if exist avr\*.h (copy avr\*.h nupkg\build\native\include\avr /y) || goto err
 
-if exist (*.cpp) copy *.cpp nupkg\build\native\source /y || goto err
+if exist *.cpp (copy *.cpp nupkg\build\native\source /y) || goto err
 
 copy ..\license.txt nupkg /y || goto err
 
