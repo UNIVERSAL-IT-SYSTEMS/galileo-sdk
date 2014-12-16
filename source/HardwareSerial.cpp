@@ -137,11 +137,11 @@ void HardwareSerial::setTimeout(unsigned long timeout)
     COMMTIMEOUTS CommTimeouts;
     GetCommTimeouts(_comHandle, &CommTimeouts);
 
-    CommTimeouts.ReadIntervalTimeout = 0;
-    CommTimeouts.ReadTotalTimeoutConstant = _timeout;
+    CommTimeouts.ReadIntervalTimeout = MAXDWORD;
+    CommTimeouts.ReadTotalTimeoutConstant = 0;
     CommTimeouts.ReadTotalTimeoutMultiplier = 0;
 
-    CommTimeouts.WriteTotalTimeoutConstant = _timeout;
+    CommTimeouts.WriteTotalTimeoutConstant = 0;
     CommTimeouts.WriteTotalTimeoutMultiplier = 0;
 
     if (!SetCommTimeouts(_comHandle, &CommTimeouts))
@@ -218,21 +218,26 @@ void HardwareSerial::flush(void)
     }
 }
 
+void HardwareSerial::BufferReadHelper(void)
+{
+    if (!ReadFile(_comHandle, &_storage, 64, &_storageCount, NULL))
+    {
+#ifdef _DEBUG
+        Log("Error %d when reading file: ", GetLastError());
+        LogLastError();
+#endif
+        return -1;
+    }
+
+    _storageUsed = true;
+    _storageIndex = 0;
+}
+
 int HardwareSerial::peek(void)
 {
     if (!_storageUsed)
     {
-        if (!ReadFile(_comHandle, &_storage, 64, &_storageCount, NULL))
-        {
-#ifdef _DEBUG
-            Log("Error %d when reading file: ", GetLastError());
-            LogLastError();
-#endif
-            return -1;
-        }
-
-        _storageUsed = true;
-        _storageIndex = 0;
+        BufferReadHelper();
 
         // if nothing was read, return 0 and dont do anything
         if (_storageCount == 0)
@@ -256,17 +261,7 @@ int HardwareSerial::read(void)
     }
     else
     {
-        if (!ReadFile(_comHandle, &_storage, 64, &_storageCount, NULL))
-        {
-#ifdef _DEBUG
-            Log("Error %d when reading file: ", GetLastError());
-            LogLastError();
-#endif
-            return -1;
-        }
-
-        _storageUsed = true;
-        _storageIndex = 0;
+        BufferReadHelper();
 
         // If only one character was read, then reset it
         if (_storageIndex + 1 >= _storageCount)
