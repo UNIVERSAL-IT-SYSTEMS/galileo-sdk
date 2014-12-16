@@ -137,6 +137,7 @@ void HardwareSerial::setTimeout(unsigned long timeout)
     COMMTIMEOUTS CommTimeouts;
     GetCommTimeouts(_comHandle, &CommTimeouts);
 
+    // Makes any read/write operation return immediately even if no bytes have been received
     CommTimeouts.ReadIntervalTimeout = MAXDWORD;
     CommTimeouts.ReadTotalTimeoutConstant = 0;
     CommTimeouts.ReadTotalTimeoutMultiplier = 0;
@@ -218,7 +219,7 @@ void HardwareSerial::flush(void)
     }
 }
 
-void HardwareSerial::BufferReadHelper(void)
+int HardwareSerial::BufferReadHelper(void)
 {
     if (!ReadFile(_comHandle, &_storage, 64, &_storageCount, NULL))
     {
@@ -231,13 +232,17 @@ void HardwareSerial::BufferReadHelper(void)
 
     _storageUsed = true;
     _storageIndex = 0;
+    return 0;
 }
 
 int HardwareSerial::peek(void)
 {
     if (!_storageUsed)
     {
-        BufferReadHelper();
+        if(BufferReadHelper() == -1)
+        {
+            return -1;
+        }
 
         // if nothing was read, return 0 and dont do anything
         if (_storageCount == 0)
@@ -261,7 +266,10 @@ int HardwareSerial::read(void)
     }
     else
     {
-        BufferReadHelper();
+        if (BufferReadHelper() == -1)
+        {
+            return -1;
+        }
 
         // If only one character was read, then reset it
         if (_storageIndex + 1 >= _storageCount)
