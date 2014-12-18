@@ -162,7 +162,7 @@ BOOL I2cTransactionClass::setAddress(ULONG slaveAdr)
         error = ERROR_CREATE_FAILED;
     }
 
-    if (status && ((slaveAdr < 0x08) || (slaveAdr >= 0x77)))
+    if (status && ((slaveAdr < 0x08) || (slaveAdr > 0x77)))
     {
         status = FALSE;
         error = ERROR_INVALID_ADDRESS;
