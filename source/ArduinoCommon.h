@@ -71,4 +71,12 @@ const UCHAR PIN_SCK = D13;      ///< Pin used for SPI Clock signal
 const UCHAR PIN_I2C_DAT = A4;   ///< Pin used for I2C Data signal
 const UCHAR PIN_I2C_CLK = A5;   ///< Pin used for I2C Clock signal
 
+
+const UCHAR SS      = 10;
+const UCHAR MOSI    = 11;
+const UCHAR MISO    = 12;
+const UCHAR SCK     = 13;
+const UCHAR SDA     = 18;
+const UCHAR SCL     = 19;
+
 #endif  // _ARDUINO_COMMON_H_

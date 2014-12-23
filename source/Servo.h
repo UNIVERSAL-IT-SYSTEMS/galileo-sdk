@@ -1,11 +1,13 @@
 // Copyright (c) Microsoft Open Technologies, Inc.  All rights reserved.  
 // Licensed under the BSD 2-Clause License.  
 // See License.txt in the project root for license information.
+#pragma once
 
 #define MIN_PULSE_WIDTH 544
 #define MAX_PULSE_WIDTH 2400
 #define DEFAULT_PULSE_WIDTH 1500
 #define REFRESH_INTERVAL 20000 // 20 ms
+#define MAX_SERVOS 12
 
 class Servo
 {

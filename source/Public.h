@@ -14,7 +14,8 @@ Environment:
     user and kernel
 
 --*/
-
+#pragma once
+    
 #define DMAP_NAME L"DmapGpio"
 
 #define DMAP_SYMBOLIC_NAME L"\\DosDevices\\" DMAP_NAME
