@@ -29,19 +29,23 @@
 #endif
 #include <math.h>
 
+// "boolean" must be defined before the inclusion of any Arduino libraries
+#define boolean bool
+#define __attribute__(x)
+
 #include "Adc.h"
 #include "ArduinoCommon.h"
 #include "ArduinoError.h"
 #include "binary.h"
 #include "HardwareSerial.h"
 #include "Stream.h"
+#include "WCharacter.h"
 #include "WindowsRandom.h"
 #include "WindowsTime.h"
 #include "WInterrupt.h"
 #include "WString.h"
 #include "wire.h"
 #include "avr/macros.h"
-
 
 #define NUM_ARDUINO_PINS 20
 #define NUM_ANALOG_PINS 6
@@ -59,7 +63,6 @@
 #define TAU             (M_PI * 2.0f)
 #define TWO_PI          TAU
 
-#define boolean bool
 typedef uint8_t byte;
 
 typedef unsigned short word;
@@ -608,8 +611,6 @@ inline uint16_t makeWord(uint8_t h, uint8_t l) { return (h << 8) | l; }
 #define sei()
 
 #define bit(b) (1UL << (b))
-#define __attribute__(x)
-
 
 // Other utility Macros
 // Turn passed in value into a string
