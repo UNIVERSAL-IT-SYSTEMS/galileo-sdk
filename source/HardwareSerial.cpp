@@ -20,7 +20,7 @@ HardwareSerial::HardwareSerial(const std::wstring &comPort)
     _storageCount(0),
     _storageIndex(0),
     _storageUsed(false),
-    _timeout(1000)
+    _timeout(0)
 {
 }
 
@@ -138,11 +138,12 @@ void HardwareSerial::setTimeout(unsigned long timeout)
     GetCommTimeouts(_comHandle, &CommTimeouts);
 
     // Makes any read/write operation return immediately even if no bytes have been received
+    // unless the _timeout variable is set to something besides 0.
     CommTimeouts.ReadIntervalTimeout = MAXDWORD;
-    CommTimeouts.ReadTotalTimeoutConstant = 0;
+    CommTimeouts.ReadTotalTimeoutConstant = _timeout;
     CommTimeouts.ReadTotalTimeoutMultiplier = 0;
 
-    CommTimeouts.WriteTotalTimeoutConstant = 0;
+    CommTimeouts.WriteTotalTimeoutConstant = _timeout;
     CommTimeouts.WriteTotalTimeoutMultiplier = 0;
 
     if (!SetCommTimeouts(_comHandle, &CommTimeouts))
