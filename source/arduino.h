@@ -552,6 +552,21 @@ inline int RunArduinoSketch()
         ret = 1;
         Log("\nSketch Aborted! A fatal error has occurred:\n");
         Log("%s\n", ex.what());
+        
+        DebugBreak();
+    
+        // reset all pins to low
+        for (int i = 0; i < NUM_ARDUINO_PINS; i++)
+        {
+            try
+            {
+                g_pins.setPinState(i, LOW);
+            }
+            catch (...)
+            {
+                // silently catch any exceptions raised when trying to set the pins to LOW
+            }
+        }
     }
     catch (const _arduino_quit_exception &)
     {
