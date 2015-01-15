@@ -39,6 +39,7 @@ private:
 
     HardwareSerial & operator= (HardwareSerial &);
 
+    int BufferReadHelper(void);
 public:
     enum SerialConfigs
     {
