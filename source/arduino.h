@@ -281,28 +281,38 @@ inline int analogRead(int pin)
     ULONG bits;
     ULONG ioPin;
 
-    // Translate the pin number passed in to a Galileo GPIO Pin number.
-    if ((pin >= 0) && (pin < NUM_ANALOG_PINS))
+    if (-1 == pin)
     {
-        ioPin = A0 + pin;
-    }
-    else if ((pin >= A0) && (pin <= A5))
-    {
-        ioPin = pin;
+        if (!g_adc.readTemp(value, bits))
+        {
+            ThrowError("Error performing analogRead on temperature pin. Galileo Gen2 does not support this functionality. Error: 0x%08x", GetLastError());
+        }
     }
     else
     {
-        ThrowError("Pin: %d is not an analog input pin.", pin);
-    }
+        // Translate the pin number passed in to a Galileo GPIO Pin number.
+        if ((pin >= 0) && (pin < NUM_ANALOG_PINS))
+        {
+            ioPin = A0 + pin;
+        }
+        else if ((pin >= A0) && (pin <= A5))
+        {
+            ioPin = pin;
+        }
+        else
+        {
+            ThrowError("Pin: %d is not an analog input pin.", pin);
+        }
 
-    if (!g_pins.verifyPinFunction(ioPin, FUNC_AIN, GalileoPinsClass::NO_LOCK_CHANGE))
-    {
-        ThrowError("Error occurred verifying pin: %d function: ANALOG_IN, Error: 0x%08x", ioPin, GetLastError());
-    }
+        if (!g_pins.verifyPinFunction(ioPin, FUNC_AIN, GalileoPinsClass::NO_LOCK_CHANGE))
+        {
+            ThrowError("Error occurred verifying pin: %d function: ANALOG_IN, Error: 0x%08x", ioPin, GetLastError());
+        }
 
-    if (!g_adc.readValue(ioPin, value, bits))
-    {
-        ThrowError("Error performing analogRead on pin: %d, Error: 0x%08x", pin, GetLastError());
+        if (!g_adc.readValue(ioPin, value, bits))
+        {
+            ThrowError("Error performing analogRead on pin: %d, Error: 0x%08x", pin, GetLastError());
+        }
     }
 
     // Scale the digitized analog value to the currently set analog read resolution.
