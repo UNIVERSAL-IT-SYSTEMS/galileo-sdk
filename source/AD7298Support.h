@@ -8,6 +8,7 @@
 #include <Windows.h>
 #include "SpiController.h"
 #include "GpioController.h"
+#include "WindowsTime.h"
 
 class AD7298Device
 {
@@ -51,6 +52,126 @@ public:
     {
         // Release the ADC SPI bus.
         m_spi.end();
+    }
+
+    /// Take a reading of the ADC temperature sensor on the board.
+    /**
+    \param[out] value The value read from the ADC.
+    \param[out] bits The size of the reading in "value" in bits.
+    \return TRUE, success. FALSE, failure, GetLastError() returns the error code.
+    */
+    inline BOOL readTemp(ULONG & value, ULONG & bits)
+    {
+        BOOL status = TRUE;
+        ULONG dataOut;
+        ULONG dataIn;
+        ULONG chanIn;
+        CMD_REG cmdReg;
+        ULONG error = ERROR_SUCCESS;
+
+        //
+        // Jog the ADC twice to bring it out of any unresponsive state (such as Partial
+        // Power-Down) that the shutdown of a previous program may have left it in.
+        //
+        for (int i = 0; i < 2; i++)
+        {
+            // Build ADC command register contents with Partial Power-Down bit clear.
+            cmdReg.ALL_BITS = 0;
+            cmdReg.WRITE = 1;
+            dataOut = (ULONG) cmdReg.ALL_BITS;
+
+            status = g_fabricGpio.setPinState(m_csFabricBit, LOW);  // Make ADC chip select active
+            if (!status) { error = GetLastError(); }
+            else
+            {
+                // Write the ADC command register.
+                status = m_spi.transfer16(dataOut, dataIn);
+                if (!status) { error = GetLastError(); }
+                g_fabricGpio.setPinState(m_csFabricBit, HIGH);      // Make ADC chip select inactive
+            }
+        }
+
+        // Din contains Tsense which needs to be set to high in order to enable temperature conversion
+        cmdReg.ALL_BITS = 0;
+        cmdReg.WRITE = 1;
+        cmdReg.Tsense = 1;
+        dataOut = (ULONG) cmdReg.ALL_BITS;
+        status = g_fabricGpio.setPinState(m_csFabricBit, LOW);
+        if (!status) { error = GetLastError(); }
+        else
+        {
+            status = m_spi.transfer16(dataOut, dataIn);
+            if (!status) { error = GetLastError(); }
+            status = g_fabricGpio.setPinState(m_csFabricBit, HIGH);
+        }
+
+        // read Dout which is our dataIn
+        // Build ADC command register contents with Partial Power-Down bit set.
+        cmdReg.ALL_BITS = 0;
+        dataOut = (ULONG) cmdReg.ALL_BITS;
+        status = g_fabricGpio.setPinState(m_csFabricBit, LOW);  // Make ADC chip select active
+        if (!status) { error = GetLastError(); }
+        else
+        {
+            status = m_spi.transfer16(dataOut, dataIn);
+            if (!status) { error = GetLastError(); }
+            g_fabricGpio.setPinState(m_csFabricBit, HIGH);      // Make ADC chip select inactive
+        }
+
+        // TsenseBusy should be high until the conversion is completed (100 micro seconds max)
+        // wait 100ns after TsenseBusy is low to start reading
+        LARGE_INTEGER us64;
+        us64.QuadPart = 101;
+        _WindowsTime.delayMicroseconds(us64);
+
+        //
+        // Get the conversion result from the ADC.
+        //
+
+        if (status)
+        {
+            // Build ADC command register contents with Partial Power-Down bit set.
+            cmdReg.ALL_BITS = 0;
+            cmdReg.WRITE = 1;
+            cmdReg.PPD = 1;
+            dataOut = (ULONG) cmdReg.ALL_BITS;
+
+            status = g_fabricGpio.setPinState(m_csFabricBit, LOW);  // Make ADC chip select active
+            if (!status) { error = GetLastError(); }
+            else
+            {
+                // Write the ADC command register and shift out the conversion result.
+                status = m_spi.transfer16(dataOut, dataIn);
+                if (!status) { error = GetLastError(); }
+                g_fabricGpio.setPinState(m_csFabricBit, HIGH);      // Make ADC chip select inactive
+            }
+        }
+
+        //
+        // Verify we got data for the Tsense and pass it back to the caller.
+        //
+
+        if (status)
+        {
+            chanIn = (dataIn >> ADC_BITS) & ((1 << ADC_CHAN_BITS) - 1);
+
+            if (chanIn != 8) // 8 is Tsense channel
+            {
+                status = FALSE;
+                error = ERROR_NO_DATA_DETECTED;
+            }
+        }
+
+        if (!status)
+        {
+            SetLastError(error);
+        }
+        else
+        {
+            value = dataIn & ((1 << ADC_BITS) - 1);
+            bits = ADC_BITS;
+        }
+        return status;
     }
 
     /// Take a reading with the ADC used on the Gen1 board.

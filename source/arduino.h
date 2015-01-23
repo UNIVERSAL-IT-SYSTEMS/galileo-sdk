@@ -267,6 +267,43 @@ inline int digitalRead(int pin)
 /// The number of bits used to return digitized analog values.
 __declspec (selectany) ULONG g_analogValueBits = 10;
 
+/// Perform an analog to digital conversion on the ADC temperature sensor.
+/**
+\return Digitized analog value read from the pin.
+\note The number of bits of the digitized analog value can be set by calling the 
+analogReadResolution() API.  By default ten bits are returned (0-1023 for 0-5v pin voltage).
+\sa analogReadResolution
+*/
+inline int readTemp()
+{
+    ULONG value;
+    ULONG bits;
+    
+    if (!g_adc.readTemp(value, bits))
+    {
+        if (GetLastError() == ERROR_INVALID_FUNCTION)
+        {
+            ThrowError("ReadTemp is not supported on Galileo Gen2. Error: 0x%08x", GetLastError());
+        }
+        else
+        {
+            ThrowError("Error performing analogRead on temperature pin. Error: 0x%08x", GetLastError());
+        }
+    }
+    
+    // Scale the digitized analog value to the currently set analog read resolution.
+    if (g_analogValueBits > bits)
+    {
+        value = value << (g_analogValueBits - bits);
+    }
+    else if (bits > g_analogValueBits)
+    {
+        value = value >> (bits - g_analogValueBits);
+    }
+
+    return value;
+}
+
 /// Perform an analog to digital conversion on one of the analog inputs.
 /**
 \param[in] pin The analog pin to read (A0-A5, or 0-5).

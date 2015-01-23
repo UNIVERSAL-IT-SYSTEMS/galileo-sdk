@@ -75,6 +75,38 @@ public:
         return status;
     }
 
+    /// Take a reading of the ADC temperature sensor on the board.
+    /**
+    \param[out] value The value read from the ADC.
+    \param[out] bits The size of the reading in "value" in bits.
+    \return TRUE, success. FALSE, failure, GetLastError() returns the error code.
+    */
+    inline BOOL readTemp(ULONG & value, ULONG & bits)
+    {
+        BOOL status = TRUE;
+        ULONG error = ERROR_SUCCESS;
+
+        // Verify we have initialized the correct ADC.
+        status = _verifyAdcInitialized();
+        if (!status) { error = GetLastError(); }
+
+        if (status)
+        {
+            if (m_boardGeneration == 2)
+            {
+                error = ERROR_INVALID_FUNCTION;
+                status = FALSE;
+            }
+            else
+            {
+                return m_gen1Adc.readTemp(value, bits);
+            }
+        }
+
+        if (!status) { SetLastError(error); }
+        return status;
+    }
+
 private:
 
     /// The board generation for which this object has been initialized.
