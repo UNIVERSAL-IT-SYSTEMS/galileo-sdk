@@ -783,7 +783,7 @@ public:
         m_pXfrQueueTail = nullptr;
         m_cmdsOutstanding = 0;
         m_readsOutstanding = 0;
-        m_hI2cLock = CreateMutex(NULL, FALSE, L"Global\\I2c_Controller_Mutex");
+        m_hI2cLock = CreateMutex(NULL, FALSE, TEXT("Global\\I2c_Controller_Mutex"));
         if (m_hI2cLock == NULL)
         {
             m_hI2cLock = INVALID_HANDLE_VALUE;

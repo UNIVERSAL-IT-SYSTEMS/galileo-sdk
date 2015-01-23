@@ -167,7 +167,7 @@ void HardwareSerial::begin(unsigned long baud, uint8_t config)
         pinMode(1, DIRECTION_OUT);
     }
 
-    _comHandle = CreateFile(_comPortName.c_str(), GENERIC_WRITE | GENERIC_READ, 0, NULL, OPEN_EXISTING, NULL, NULL);
+    _comHandle = CreateFileW(_comPortName.c_str(), GENERIC_WRITE | GENERIC_READ, 0, NULL, OPEN_EXISTING, NULL, NULL);
 
     if (_comHandle == INVALID_HANDLE_VALUE)
     {
