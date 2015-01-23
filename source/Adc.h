@@ -75,6 +75,12 @@ public:
         return status;
     }
 
+    /// Take a reading of the ADC temperature sensor on the board.
+    /**
+    \param[out] value The value read from the ADC.
+    \param[out] bits The size of the reading in "value" in bits.
+    \return TRUE, success. FALSE, failure, GetLastError() returns the error code.
+    */
     inline BOOL readTemp(ULONG & value, ULONG & bits)
     {
         BOOL status = TRUE;
@@ -88,7 +94,8 @@ public:
         {
             if (m_boardGeneration == 2)
             {
-                return FALSE;
+                error = ERROR_INVALID_FUNCTION;
+                status = FALSE;
             }
             else
             {

@@ -8,6 +8,7 @@
 #include <Windows.h>
 #include "SpiController.h"
 #include "GpioController.h"
+#include "WindowsTime.h"
 
 class AD7298Device
 {
@@ -53,6 +54,12 @@ public:
         m_spi.end();
     }
 
+    /// Take a reading of the ADC temperature sensor on the board.
+    /**
+    \param[out] value The value read from the ADC.
+    \param[out] bits The size of the reading in "value" in bits.
+    \return TRUE, success. FALSE, failure, GetLastError() returns the error code.
+    */
     inline BOOL readTemp(ULONG & value, ULONG & bits)
     {
         BOOL status = TRUE;
@@ -113,7 +120,9 @@ public:
 
         // TsenseBusy should be high until the conversion is completed (100 micro seconds max)
         // wait 100ns after TsenseBusy is low to start reading
-        Sleep(1);
+        LARGE_INTEGER us64;
+        us64.QuadPart = 101;
+        _WindowsTime.delayMicroseconds(us64);
 
         //
         // Get the conversion result from the ADC.
