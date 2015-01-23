@@ -81,7 +81,7 @@ BOOL OpenControllerDevice(PWCHAR deviceName, HANDLE & handle, DWORD shareMode)
     if (handle == INVALID_HANDLE_VALUE)
     {
         // Open the specified device.
-        handle = CreateFile(
+        handle = CreateFileW(
             deviceName,
             GENERIC_READ | GENERIC_WRITE,
             shareMode,
