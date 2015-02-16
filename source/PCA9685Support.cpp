@@ -5,12 +5,16 @@
 #include "PCA9685Support.h"
 #include "ExpanderDefs.h"
 #include "I2cController.h"
+#include "WindowsTime.h"
+
+const ULONG kPCA9685_PrescaleFrequency = 25000000;
 
 // Start with "chip not initialized" status.
 BOOL PCA9685Device::m_chipIsInitialized = FALSE;
 
+
 // PWM prescale value for default pulse rate of 1000 pulses per second.
-// Prescale = round(25000000/(4096 * pulse_rate)) - 1
+// Prescale = round(kPCA9685_PrescaleFrequency/(4096 * pulse_rate)) - 1
 UCHAR PCA9685Device::m_freqPreScale = 5;
 
 const ULONG PCA9685Device::PWM_BITS         =   12;     // This PWM chip has 12 bits of resolution
@@ -26,6 +30,7 @@ const ULONG PCA9685Device::REGS_PER_LED     = 0x04;     // Number of registers f
 const ULONG PCA9685Device::PRE_SCALE_ADR    = 0xFE;     // Address of frequency prescale register
 const ULONG PCA9685Device::TestMode_ADR     = 0xFF;     // Address of TestMode register
 const ULONG PCA9685Device::LED_COUNT        = 0x10;     // Number of "LED" ports on the chip
+
 /**
 This method takes the actions needed to set a port bit of the PWM chip to the desired state.
 \param[in] i2cAdr The I2C address of the PWM chip.
@@ -274,6 +279,138 @@ BOOL PCA9685Device::SetPwmDutyCycle(ULONG i2cAdr, ULONG channel, ULONG dutyCycle
     }
 
     if (!status) { SetLastError(error); }
+    return status;
+}
+
+/**
+Set the width of the positive pulses on one of the PWM channels.
+\param[in] i2cAdr The I2C address of the PWM chip.
+\param[in] channel The channel on the PWM chip for which to set the pulse width.
+\param[in] frequency The desired frequency 
+\return TRUE success.FALSE failure, GetLastError() provides error code.
+*/
+BOOL PCA9685Device::SetPwmFrequency(ULONG i2cAdr, ULONG channel, ULONG frequency)
+{
+    BOOL status = TRUE;
+    DWORD error = ERROR_SUCCESS;
+    I2cTransactionClass transaction;
+    ULONGLONG prescaler = 0;
+    UCHAR bitRegsAdr = 0;                       // Address of start of registers for bit in question
+    UCHAR readBuf[1] = { 0 };                   // Buffer for reading data from chip
+    UCHAR mode1RegAdr[1] = { MODE1_ADR };       // Buffer for MODE1 register address
+    MODE1 mode1Reg = { 0, 0, 0, 0, 0, 1, 0, 0 }; // No sleep, auto-increment, internal clock
+    UCHAR preScaleAdr[1] = { PRE_SCALE_ADR };   // Buffer for PRE_SCALE register address
+    UCHAR pulseData[REGS_PER_LED] = { 0x00, 0x00, 0x00, 0x00 };    // Registers data to set pulse time
+
+    UCHAR newFreq = (UCHAR)(round(kPCA9685_PrescaleFrequency / (4096 * frequency)) - 1);
+    if (newFreq > 255)
+    {
+        newFreq = 255;
+    }
+    else if (newFreq < 0)
+    {
+        newFreq = 0;
+    }
+
+    if (m_freqPreScale == newFreq)
+    {
+        return TRUE;
+    }
+
+    if (channel >= LED_COUNT)
+    {
+        status = FALSE;
+        error = ERROR_INVALID_ADDRESS;
+    }
+
+    if (status)
+    {
+        // Make sure the PWM chip is initialized.
+        status = _InitializeChip(i2cAdr);
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        // Set the I2C address of the PWM chip.
+        status = transaction.setAddress(i2cAdr);
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        // Indicate this chip supports high speed I2C transfers.
+        transaction.useHighSpeed();
+    }
+
+    // Cannot change the prescaler unless the chip is in sleep mode.
+    // Queue sending the address of the MODE1 regeister to the PWM chip.
+    if (status)
+    {
+        status = transaction.queueWrite(mode1RegAdr, sizeof(mode1Reg));
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        MODE1 mode1Reg = { 0, 0, 0, 0, 1, 1, 0, 0 }; // sleep, auto-increment, internal clock
+        // Queue sending the contents of MODE1 register.
+        status = transaction.queueWrite((PUCHAR)&mode1Reg, 1);
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        // Actually perform the I2C transfers specified above.
+        status = transaction.execute();
+        if (!status) { error = GetLastError(); }
+    }
+
+    transaction.reset();
+
+    if (status)
+    {
+        // Queue sending the address of the PRE_SCALE register to the PWM chip.
+        status = transaction.queueWrite(preScaleAdr, sizeof(preScaleAdr), TRUE);
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        // Queue sendng the prescale value.
+        status = transaction.queueWrite(&newFreq, 1);
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        // Queue sending the address of the MODE1 register to the PWM chip.
+        status = transaction.queueWrite(mode1RegAdr, sizeof(mode1RegAdr), TRUE);
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        // Queue sending the contents of MODE1 register.
+        status = transaction.queueWrite((PUCHAR)&mode1Reg, 1);
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        // Actually perform the I2C transfers specified above.
+        status = transaction.execute();
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        m_freqPreScale = newFreq;
+    }
+    else
+    { 
+        SetLastError(error); 
+    }
     return status;
 }
 

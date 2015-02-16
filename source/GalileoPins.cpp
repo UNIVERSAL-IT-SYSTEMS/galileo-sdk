@@ -1213,6 +1213,50 @@ BOOL GalileoPinsClass::setPwmDutyCycle(ULONG pin, ULONG dutyCycle)
     return status;
 }
 
+/// Method to set the PWM frequency for a pin.
+BOOL GalileoPinsClass::setPwmFrequency(ULONG pin, ULONG frequency)
+{
+    BOOL status = TRUE;
+    DWORD error = ERROR_SUCCESS;
+    ULONG expNo;
+    ULONG channel;
+    ULONG expType;
+    ULONG i2cAdr;
+
+    if (status)
+    {
+        status = _verifyBoardGeneration();
+        if (!status) { error = GetLastError(); }
+    }
+
+    // These statements depend on the board generation being set, so they must come
+    // after the _verifyBoardGeneration() call.
+    expNo = m_PwmChannels[pin].expander;
+    channel = m_PwmChannels[pin].channel;
+    expType = m_ExpAttributes[expNo].Exp_Type;
+    i2cAdr = m_ExpAttributes[expNo].I2c_Address;
+
+    // Dispatch to the correct code based on the PWM chip type:
+    switch (expType)
+    {
+    case PCA9685:
+        status = PCA9685Device::SetPwmFrequency(i2cAdr, channel, frequency);
+        if (!status) { error = GetLastError(); }
+        break;
+    case CY8C9540A:
+        status = CY8C9540ADevice::SetPwmFrequency(i2cAdr, channel, frequency);
+        if (!status) { error = GetLastError(); }
+        break;
+    default:
+        status = FALSE;
+        error = ERROR_NOT_SUPPORTED;
+    }
+
+    if (!status) { SetLastError(error); }
+    return status;
+}
+
+
 /**
 Method to determine the generation of the board this code is running on, and
 to configure the code appropriately.

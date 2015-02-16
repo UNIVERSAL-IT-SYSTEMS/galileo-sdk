@@ -20,6 +20,9 @@ public:
     /// Set the PWM pulse width.
     static BOOL SetPwmDutyCycle(ULONG i2cAdr, ULONG bit, ULONG pulseWidth);
 
+    /// Set the PWM frequency
+    static BOOL SetPwmFrequency(ULONG i2cAdr, ULONG bit, ULONG frequency);
+
     /// Method to get the resolution of this PWM chip.
     static ULONG GetResolution()
     {

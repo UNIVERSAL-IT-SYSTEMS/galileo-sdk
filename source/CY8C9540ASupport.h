@@ -32,6 +32,9 @@ public:
     /// Set the PWM pulse width.
     static BOOL SetPwmDutyCycle(ULONG i2cAdr, ULONG chan, ULONG pulseWidth);
 
+    /// Set the PWM frequency
+    static BOOL SetPwmFrequency(ULONG i2cAdr, ULONG chan, ULONG frequency);
+        
     /// Method to get the resolution of this PWM chip.
     static  ULONG GetResolution()
     {
@@ -114,8 +117,9 @@ private:
     }
 
     /// Configure the PWM frequency on a channel.
-    static BOOL _configurePwmChannelFrequency(ULONG i2cAdr, ULONG chan);
+    static BOOL _configurePwmChannelFrequency(ULONG i2cAdr, ULONG chan, ULONG frequency);
 
+    static ULONG _clkFrequency;
 };
 
 #endif  // _CY8C9540A_SUPPORT_H_
