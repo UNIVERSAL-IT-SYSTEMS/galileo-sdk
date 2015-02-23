@@ -800,7 +800,7 @@ BOOL CY8C9540ADevice::SetPwmFrequency(ULONG i2cAdr, ULONG channel, ULONG frequen
     if (frequency <= 93750)              ///< Config PWM register value for the programmable source
     {
         frequencySource = PWM_CLK_368;  // The This is the programmable clock; minimum frequency is 368 Hz
-        divider =  93750 /  frequency;    // The programmable clock uses the 93,750Hz clock, with a divider.
+        divider =  93750 / 255 / frequency;    // The programmable clock uses the 93,750Hz clock, an implied 255 divider with a divider.
         if (divider > 255)
             divider = 255;
     }
@@ -879,7 +879,7 @@ BOOL CY8C9540ADevice::_configurePwmChannelFrequency(ULONG i2cAdr, ULONG channel,
     ULONGLONG pulseWidth = 0;
     UCHAR chanSelectAdr[1] = { PWM_SELECT_ADR };    // Address of PWM Channel Select register
     UCHAR chanSelectData[1] = { 0 };                // Data buffer for writing to Channel Select register
-    UCHAR pwmRegData[3] = { 0, (UCHAR)clkFrequency, 0xFF }; // Data buffer for writing to PWM registers
+    UCHAR pwmRegData[] = { (UCHAR)clkFrequency, 0xFF }; // Data buffer for writing to PWM registers
 
 
     if (channel >= PWM_CHAN_COUNT)
