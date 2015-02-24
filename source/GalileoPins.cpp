@@ -1213,7 +1213,12 @@ BOOL GalileoPinsClass::setPwmDutyCycle(ULONG pin, ULONG dutyCycle)
     return status;
 }
 
-/// Method to set the PWM frequency for a pin.
+/**
+ Method to set the PWM frequency for a pin.
+\param[in] pin The number of the GPIO pin in question.
+\param[in] frequency to set for the pin.
+\return TRUE success.FALSE failure, GetLastError() provides error code.
+*/
 BOOL GalileoPinsClass::setPwmFrequency(ULONG pin, ULONG frequency)
 {
     BOOL status = TRUE;

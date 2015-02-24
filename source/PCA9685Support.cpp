@@ -8,6 +8,8 @@
 #include "WindowsTime.h"
 
 const ULONG kPCA9685_PrescaleFrequency = 25000000;
+const ULONG kPCA9685_MinPrescale = 3;
+const ULONG kPCA9685_MaxPrescale = 255;
 
 // Start with "chip not initialized" status.
 BOOL PCA9685Device::m_chipIsInitialized = FALSE;
@@ -283,9 +285,9 @@ BOOL PCA9685Device::SetPwmDutyCycle(ULONG i2cAdr, ULONG channel, ULONG dutyCycle
 }
 
 /**
-Set the width of the positive pulses on one of the PWM channels.
+Set the frequency of the PWM channels.
 \param[in] i2cAdr The I2C address of the PWM chip.
-\param[in] channel The channel on the PWM chip for which to set the pulse width.
+\param[in] channel The channel on the PWM chip for which to set the frequency.
 \param[in] frequency The desired frequency 
 \return TRUE success.FALSE failure, GetLastError() provides error code.
 */
@@ -303,13 +305,13 @@ BOOL PCA9685Device::SetPwmFrequency(ULONG i2cAdr, ULONG channel, ULONG frequency
     UCHAR pulseData[REGS_PER_LED] = { 0x00, 0x00, 0x00, 0x00 };    // Registers data to set pulse time
 
     UCHAR newFreq = (UCHAR)(round(kPCA9685_PrescaleFrequency / (4096 * frequency)) - 1);
-    if (newFreq > 255)
+    if (newFreq > kPCA9685_MaxPrescale)
     {
-        newFreq = 255;
+        newFreq = kPCA9685_MaxPrescale;
     }
-    else if (newFreq < 0)
+    else if (newFreq < kPCA9685_MinPrescale)
     {
-        newFreq = 0;
+        newFreq = kPCA9685_MinPrescale;
     }
 
     if (m_freqPreScale == newFreq)

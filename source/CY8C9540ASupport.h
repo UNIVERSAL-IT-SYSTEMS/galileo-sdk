@@ -33,7 +33,7 @@ public:
     static BOOL SetPwmDutyCycle(ULONG i2cAdr, ULONG chan, ULONG pulseWidth);
 
     /// Set the PWM frequency
-    static BOOL SetPwmFrequency(ULONG i2cAdr, ULONG chan, ULONG frequency);
+    static BOOL SetPwmFrequency(ULONG i2cAdr, ULONG chan, ULONG frequencySource);
         
     /// Method to get the resolution of this PWM chip.
     static  ULONG GetResolution()
