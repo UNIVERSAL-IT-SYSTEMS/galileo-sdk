@@ -112,6 +112,9 @@ public:
     /// Method to set the PWM duty cycle for a pin.
     BOOL setPwmDutyCycle(ULONG pin, ULONG dutyCycle);
 
+    /// Method to set the PWM frequency for a pin.
+    BOOL setPwmFrequency(ULONG pin, ULONG frequency);
+
     /// Method to override auto-detection of board generation.
     BOOL setBoardGeneration(ULONG gen);
 

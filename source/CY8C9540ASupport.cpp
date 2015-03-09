@@ -51,6 +51,18 @@ const ULONG CY8C9540ADevice::CMD_WR_CONFIG     =    5;  // Command to write devi
 const ULONG CY8C9540ADevice::CMD_RD_CONFIG     =    6;  // Command to read device configuation.
 const ULONG CY8C9540ADevice::CMD_LD_DEFAULTS   =    7;  // Command to reconfigure with stored POR defaults.
 
+ULONG CY8C9540ADevice::_clkFrequency = PWM_CLK_94K;
+
+const ULONG kCY8C9540A_MaxDivider = 255;
+const ULONG kCY8C9540A_MaxFrequency = 24000000;
+const ULONG kCY8C9540A_32kFrequency = 32000;
+const ULONG kCY8C9540A_24MFrequency = 24000000;
+const ULONG kCY8C9540A_1_5MFrequency = 1500000;
+const ULONG kCY8C9540A_94kFrequency = 93750;
+const ULONG kCY8C9540A_ProgFrequency = kCY8C9540A_94kFrequency / kCY8C9540A_MaxDivider;
+
+
+
 /**
 This method takes the actions needed to set a port bit of the I/O Expander chip to the desired state.
 \param[in] i2cAdr The I2C address of the chip.
@@ -580,7 +592,7 @@ BOOL CY8C9540ADevice::SetPortbitPwm(ULONG i2cAdr, ULONG portBit, ULONG pwmChan)
     if (status)
     {
         // Set the PWM frequency.
-        status = _configurePwmChannelFrequency(i2cAdr, pwmChan);
+        status = _configurePwmChannelFrequency(i2cAdr, pwmChan, PWM_CLK_94K);
         if (!status) { error = GetLastError(); }
     }
 
@@ -769,20 +781,122 @@ BOOL CY8C9540ADevice::SetPwmDutyCycle(ULONG i2cAdr, ULONG channel, ULONG dutyCyc
 }
 
 /**
-This method gets the desired frequency from the array of frequencies by channel
-number.  The only frequency currently supported i 367 hz.
+Set the width of the positive pulses on one of the PWM channels.
 \param[in] i2cAdr The I2C address of the PWM chip.
-\param[in] channel The channel on the PWM chip for which to set the frequencey.
+\param[in] channel The channel on the PWM chip for which to set the pulse width.
+\param[in] frequency The desired frequency
 \return TRUE success.FALSE failure, GetLastError() provides error code.
 */
-BOOL CY8C9540ADevice::_configurePwmChannelFrequency(ULONG i2cAdr, ULONG channel)
+BOOL CY8C9540ADevice::SetPwmFrequency(ULONG i2cAdr, ULONG channel, ULONG frequency)
 {
     BOOL status = TRUE;
     DWORD error = ERROR_SUCCESS;
     I2cTransactionClass transaction;
     ULONGLONG pulseWidth = 0;
-    UCHAR pwmRegBaseAdr[1] = { PWM_SELECT_ADR };    // Address of PWM Channel Select register
-    UCHAR pwmRegData[3] = { 0, PWM_CLK_94K, 0xFF }; // Data buffer for writing to PWM registers
+    UCHAR dividerAdr[1] = { DIVIDER_ADR };       // Address of PWM Pulsewidth register
+    UCHAR dividerData[1] = { 0 };                // Data buffer for writing Select PWM register
+    ULONG divider = 0;
+    ULONG frequencySource;
+
+    if (channel >= PWM_CHAN_COUNT)
+    {
+        status = FALSE;
+        error = ERROR_INVALID_ADDRESS;
+    }
+
+    // No divide by zero
+    if (frequency < 1)
+    {
+        status = FALSE;
+        error = ERROR_BAD_ARGUMENTS;
+    }
+
+    if (status)
+    {
+        if (frequency <= kCY8C9540A_ProgFrequency)              ///< Config PWM register value for the programmable source
+        {
+            frequencySource = PWM_CLK_368;  // The This is the programmable clock; minimum frequency is 368 Hz
+            divider = kCY8C9540A_ProgFrequency / frequency;    // The programmable clock uses the 93,750Hz clock, an implied 255 divider with a divider.
+            if (divider > kCY8C9540A_MaxDivider)
+                divider = kCY8C9540A_MaxDivider;
+        }
+        else if (frequency <= kCY8C9540A_32kFrequency)         ///< Config PWM register value for 32 kHz clock.)
+        {
+            frequencySource = PWM_CLK_32K;
+        }
+        else if (frequency <= kCY8C9540A_94kFrequency)         ///< Config PWM register value for 93.75 kHz clock.
+        {
+            frequencySource = PWM_CLK_94K;
+        }
+        else if (frequency <= kCY8C9540A_1_5MFrequency)         ///< Config PWM register value for 1.5 MHz clock.
+        {
+            frequencySource = PWM_CLK_1M5;
+        }
+        else                                       ///< Config PWM register value for 24 MHz clock.
+        {
+            frequencySource = PWM_CLK_24M;
+        }
+
+        // Configure the PWM channel for max frequency
+        status = _configurePwmChannelFrequency(i2cAdr, channel, frequencySource);
+    }
+
+    if (divider > 0)
+    {
+        if (status)
+        {
+            // Calculate the pulse width value for the specified dutyCycle.
+            dividerData[0] = (UCHAR)divider;
+        }
+
+        if (status)
+        {
+            // Set the I2C address of the I/O Expander we want to talk to.
+            status = transaction.setAddress(i2cAdr);
+            if (!status) { error = GetLastError(); }
+        }
+
+        if (status)
+        {
+            // Queue a write of the PWM Period register address.
+            status = transaction.queueWrite(dividerAdr, sizeof(dividerAdr), TRUE);
+            if (!status) { error = GetLastError(); }
+        }
+
+        if (status)
+        {
+            // Queue a write of the PWM Divider data.
+            status = transaction.queueWrite(dividerData, sizeof(dividerData));
+            if (!status) { error = GetLastError(); }
+        }
+
+        if (status)
+        {
+            //  Perform the I2C transfers specified above.
+            status = transaction.execute();
+            if (!status) { error = GetLastError(); }
+        }
+    }
+
+    if (!status) { SetLastError(error); }
+    return status;
+}
+/**
+This method gets the desired frequency from the array of frequencies by channel
+number.  
+\param[in] i2cAdr The I2C address of the PWM chip.
+\param[in] channel The channel on the PWM chip for which to set the frequency.
+\param[in] frequency clock selector.
+\return TRUE success.FALSE failure, GetLastError() provides error code.
+*/
+BOOL CY8C9540ADevice::_configurePwmChannelFrequency(ULONG i2cAdr, ULONG channel, ULONG frequencySource)
+{
+    BOOL status = TRUE;
+    DWORD error = ERROR_SUCCESS;
+    I2cTransactionClass transaction;
+    ULONGLONG pulseWidth = 0;
+    UCHAR chanSelectAdr[1] = { PWM_SELECT_ADR };    // Address of PWM Channel Select register
+    UCHAR pwmRegData[] = { 0, (UCHAR)frequencySource, 0xFF }; // Data buffer for writing to PWM registers
 
 
     if (channel >= PWM_CHAN_COUNT)
@@ -798,6 +912,13 @@ BOOL CY8C9540ADevice::_configurePwmChannelFrequency(ULONG i2cAdr, ULONG channel)
 
         // Set the I2C address of the I/O Expander we want to talk to.
         status = transaction.setAddress(i2cAdr);
+        if (!status) { error = GetLastError(); }
+    }
+
+    if (status)
+    {
+        // Queue a write of the PWM Select register address.
+        status = transaction.queueWrite(chanSelectAdr, sizeof(chanSelectAdr)); 
         if (!status) { error = GetLastError(); }
     }
 

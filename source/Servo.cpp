@@ -47,6 +47,8 @@ uint8_t Servo::attach(int pin, int min, int max)
     _min = min;
     _max = max;
 
+    pinMode(pin, OUTPUT);
+
     return 0;
 }
 
@@ -83,8 +85,8 @@ void Servo::write(int value)
     }
     else
     {
-        double alternateValue = (double) value / 180 * (_max - _min) + _min;
-        writeMicroseconds((int) alternateValue);
+        double scaledValue = (double) value / 180.0 * (_max - _min) + _min;
+        writeMicroseconds((int)scaledValue);
     }
 }
 
@@ -113,20 +115,19 @@ void Servo::writeMicroseconds(int value)
         alternateValue = _max;
     }
 
-    // Making the frequency 50 Hz which is equal to a 20ms period
-    int frequency = (int)((double) 1 / ((double) REFRESH_INTERVAL / 1000000));
-    
     // Validation of the pin to make sure PWM functionality is allowed
     if (!g_pins.verifyPinFunction(_attachedPin, FUNC_PWM, GalileoPinsClass::NO_LOCK_CHANGE))
     {
         ThrowError("Error occurred verifying pin: %d function: PWM, Error: %08x", _attachedPin, GetLastError());
     }
 
-    HRESULT hr = ERROR_SUCCESS;
+    if (!g_pins.setPwmFrequency(_attachedPin, REFRESH_FREQUENCY))
+    {
+        ThrowError("Error occurred setting pin: %d Frequency to: %d, Error: %08x", _attachedPin, REFRESH_FREQUENCY, GetLastError());
+    }
 
     // Scale the duty cycle to the range used by the driver.
-    // From 0-255 to 0-PWM_MAX_DUTYCYCLE, rounding to nearest value.
-    ULONG dutyCycle = (ULONG) ((((double) alternateValue / REFRESH_INTERVAL * 255UL * PWM_MAX_DUTYCYCLE) + 127UL) / 255UL);
+    ULONG dutyCycle = (ULONG)(alternateValue / (double) REFRESH_INTERVAL * (1ULL << 32));
 
     // Prepare the pin for PWM use.
     if (!g_pins.setPwmDutyCycle(_attachedPin, (ULONG) dutyCycle))
@@ -134,7 +135,7 @@ void Servo::writeMicroseconds(int value)
         ThrowError("Error occurred setting pin: %d PWM duty cycle to: %d, Error: %08x", _attachedPin, dutyCycle, GetLastError());
     }
 
-    double servoIndexDouble = (double) (alternateValue - _min) / (_max - _min) * 180;
+    double servoIndexDouble = (double) (alternateValue - _min) / (_max - _min) * 180.0;
     _servoIndex = static_cast<uint8_t>(servoIndexDouble);
 }
 
